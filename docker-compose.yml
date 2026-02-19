@@ -1,0 +1,51 @@
+version: "3.9"
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://user:password@postgres:5432/scheduler
+      REDIS_URL: redis://redis:6379
+      LLM_PROVIDER: local
+      OLLAMA_BASE_URL: http://host.docker.internal:11434
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      DEV_MODE: "true"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health').read()"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  postgres:
+    image: postgres:16
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: scheduler
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d scheduler"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
