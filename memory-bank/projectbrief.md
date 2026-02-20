@@ -22,7 +22,7 @@ Build a **production-ready, hybrid LLM workflow agent** that accepts natural lan
 - Services: Extraction, rule engine, scheduler (unified preview/request, normalized IDs, list_requests, candidates, assign), approval (pending + pending_admin), partner (consent accept/reject).
 - API: Schedule preview and request (unified), shifts, schedule/requests, shift candidates and assign (admin), partner pending/accept/reject, approval pending/approve/reject, metrics, health, employees CRUD.
 - Frontend: React + Vite—Login, Submit, Shiftboard (primary, paste/parse, request coverage), Consents, My Requests, Approvals (urgent), Dashboard, Admin (employee CRUD). Auth: X-Employee-Id; admin-only for approval and coverage fill.
-- Infra: Docker Compose, seed script, README, AGENTS.md Memory Bank.
+- Infra: Docker Compose, seed script, README, AGENTS.md Memory Bank. Production: Railway (staging + production), Alembic migrations, CI/CD via GitHub Actions.
 
 ## Out of Scope (Unless Added Later)
 
