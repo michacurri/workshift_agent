@@ -2,7 +2,7 @@
 
 ## Current Work Focus
 
-- **Workflow cohesion v3 (P0–P8) plus UX refinements.** System has normalized request ownership and shift IDs, partner consent, coverage fill, unified preview/request, Shiftboard as primary UI with **single input area** ("Describe your request or paste a message"), **guided completion** (preview returns `needsInput` instead of hard errors for missing date/shift type), and Ollama running **on host** (not in Docker by default).
+- **Deployment and production readiness.** Railway deployment plan implemented: CD workflow (staging + optional prod promotion), Alembic migrations, Claude-first hosted LLM, CI quality gates (Ruff, pip/npm audit, gitleaks), and deployment/domain/migration docs. Placeholder unit/integration tests remain intentionally deferred; workflow-coverage audit and placeholder replacement are documented with agent handoff prompts.
 - **Stable areas:** Schedule request (text or structured), approval, partner consent, coverage fill, employees CRUD, auth, Shiftboard (single input + Preview, "Review details" optional), Consents, My Requests, Approvals with urgent highlight. Preview returns parsed + validation + summary + optional `needsInput` for missing fields.
 
 ## Recent Changes (Post–v3 UX and DX)
@@ -43,11 +43,20 @@
   - **test-integration-llm** job for nightly/manual/main: live-LLM integration lane
 - **Coverage permission tests de-flaked:** Non-admin 403 coverage tests now use any available shift id from seeded range (instead of brittle John/day-specific lookup), removing skip-only behavior from expected permission assertions.
 
+- **Railway deployment and production hardening (implemented):**
+  - **CD:** `.github/workflows/deploy-railway.yml` — deploy to staging on push to main; optional production promotion via `workflow_dispatch` input `promote_to_prod=true` or repo variable `AUTO_PROMOTE_PROD`. Smoke tests for backend health and frontend root. Secrets: RAILWAY_TOKEN, RAILWAY_PROJECT_ID, RAILWAY_*_SERVICE, STAGING_*_URL, PROD_*_URL.
+  - **Migrations:** Alembic baseline in `backend/alembic/`; `make migrate`, `make db-reset` runs migrations then seed. Compose sets `DEV_MODE=false` so schema is migration-owned. Docs: `docs/deployment/migrations.md`.
+  - **Hosted LLM:** Claude-first via `HOSTED_LLM_VENDOR=anthropic` and Anthropic API in `backend/llm/hosted_provider.py`; OpenAI fallback retained. Config: `CORS_ALLOW_ORIGINS`, `PORT` for production; `.env.example` documents Anthropic and OpenAI vars.
+  - **CI gates:** Backend lint (Ruff), dependency audit (pip-audit, npm audit --audit-level=critical), secret scan (gitleaks with GITHUB_TOKEN), frontend build. Ruff violations fixed (unused imports/vars in seed_db, approval_service, extraction_service, conftest, time_utils).
+  - **Docs:** `docs/deployment/railway.md`, `docs/deployment/domains.md`, `docs/testing/workflow-coverage-audit.md`, `docs/backlog.md` (pinned LLM-edge test). README: first-run includes `make migrate`; deployment section links to deployment docs.
+- **Placeholder tests:** `backend/tests/unit/test_placeholder.py` and `backend/tests/integration/test_placeholder.py` remain; documented as gap in workflow-coverage-audit. Plan includes agent handoff prompt for Step 6 (workflow coverage audit); a separate prompt can be used to replace or remove placeholders (see prior agent summary).
+
 ## Next Steps (For New Agent)
 
 - **Optional v2 (plan):** LLM ranking/explanations over candidate lists; iterative schedule draft generation with deterministic validation and admin approval.
-- **DB:** After schema changes, `make db-reset` or migration then `make seed`. Seed does not create ScheduleRequest rows; add demo requests in seed if needed for Fill coverage demos.
-- **CI hardening (optional):** If hosted provider credentials are not present in CI, keep `integration_llm` lane pointing at local Ollama setup or gate lane execution on secrets availability.
+- **DB:** After schema changes, `make db-reset` (runs migrations + seed) or add Alembic revision then `make migrate`. Seed does not create ScheduleRequest rows; add demo requests in seed if needed for Fill coverage demos.
+- **Workflow coverage audit:** Run Step 6 agent handoff prompt (in deployment plan) to refresh traceability matrix and prioritized tests; optionally run placeholder-replacement prompt to replace or remove unit/integration placeholder tests.
+- **Railway go-live:** Configure GitHub and Railway secrets/vars per `docs/deployment/railway.md`; add custom domain when ready and set `CORS_ALLOW_ORIGINS` and `VITE_API_BASE_URL` accordingly.
 
 ## Active Decisions and Preferences
 

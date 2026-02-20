@@ -7,10 +7,21 @@ This repository is a monorepo with two Railway services:
 - **Backend**: FastAPI (`/backend`)
 - **Frontend**: React/Vite SPA (`/frontend`)
 
-Each service includes config-as-code:
+Config-as-code:
 
-- `backend/railway.toml`
-- `frontend/railway.toml`
+- **Backend**: root `railway.toml` (used when backend service Root Directory is repo root). Builds with `Dockerfile.backend` so the app runs as `uvicorn backend.main:app` from `/app`.
+- **Frontend**: `frontend/railway.toml`
+
+### Monorepo: set Root Directory per service
+
+In Railway → each service → **Settings** → **Source** → **Root Directory**:
+
+| Service  | Root Directory |
+|----------|----------------|
+| Backend  | *empty* (repo root) — uses root `railway.toml` and `Dockerfile.backend` |
+| Frontend | `frontend` |
+
+The backend must build from repo root so the Dockerfile can copy `backend/` into `/app/backend/` and the `backend` package is importable. The frontend must build from `frontend/` so Nixpacks/Railpack sees a single Node app.
 
 ## Environments
 

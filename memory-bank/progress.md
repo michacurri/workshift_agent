@@ -26,27 +26,33 @@
   - `frontend/src/hooks/approvals.hook.test.tsx` (load success/failure, action + refresh)
   - `frontend/src/hooks/shiftBoard.hook.test.tsx` (parse hydrate, preview/submit flow, deterministic fixed-clock behavior)
   - `frontend/src/pages/Login.test.tsx`, `frontend/src/pages/MyRequests.test.tsx`, `frontend/src/pages/ShiftBoard.test.tsx`
-- **Frontend CI/ops integration:** root `Makefile` now has `make test-frontend-unit`; CI has a separate `Frontend Unit Tests` job (Node setup, `npm run typecheck`, `npm test` in `frontend/`).
+- **Frontend CI/ops integration:** root `Makefile` now has `make test-frontend-unit`; CI has a separate `Frontend Unit Tests` job (Node setup, `npm run typecheck`, `npm test`, `npm run build` in `frontend/`).
 - **Coverage permission tests stabilized:** non-admin 403 tests in coverage flow now select any available shift ID in seeded range, eliminating brittle skip conditions tied to specific seeded assignment assumptions.
+- **Deployment (Railway):** CD workflow (`.github/workflows/deploy-railway.yml`) deploys to staging on push to main; optional production promotion via workflow_dispatch or `AUTO_PROMOTE_PROD`. Docs: `docs/deployment/railway.md`, `docs/deployment/domains.md`, `docs/deployment/migrations.md`.
+- **Alembic:** Baseline migration and `make migrate` / `make migrate-revision`; `make db-reset` runs migrations then seed. Production/staging use `alembic upgrade head` before app start.
+- **Hosted LLM:** Claude-first (`HOSTED_LLM_VENDOR=anthropic`, Anthropic API in hosted_provider); OpenAI fallback; CORS and PORT env-driven for Railway.
+- **CI quality gates:** Backend lint (Ruff), dependency audit (pip-audit, npm audit --audit-level=critical), secret scan (gitleaks with GITHUB_TOKEN). Ruff violations in seed_db, approval_service, extraction_service, conftest, time_utils fixed.
+- **Workflow coverage audit:** `docs/testing/workflow-coverage-audit.md` documents traceability; placeholder tests in unit/ and integration/ remain; agent handoff prompt in deployment plan for Step 6; LLM-edge test pinned in `docs/backlog.md`.
 
 ## What's Left to Build
 
 - **v2 (optional):** LLM ranking/explanations over deterministic candidate lists; iterative schedule draft generation with deterministic validation and admin approval (per plan).
-- **DB migration/reset:** New ScheduleRequest columns require DB reset or migration for POC; then `make db-reset` and re-seed.
-- **Tests:** Continue expanding real unit and integration coverage driven by user stories; keep deterministic tests in fast lane and LLM-dependent tests in `integration_llm` lane.
-- **Frontend tests:** Expand Gherkin/JTBD scenario coverage for additional pages/hooks as features evolve.
-- Other (optional): Circuit breaker, pagination, Alembic migrations.
+- **Tests:** Replace or remove placeholder tests (unit/integration); expand coverage per workflow-coverage-audit priorities; keep deterministic tests in fast lane and LLM-dependent tests in `integration_llm` lane.
+- **Frontend tests:** Expand Gherkin/JTBD scenario coverage (e.g. Approvals, Consents, AdminEmployees) per audit.
+- Other (optional): Circuit breaker, pagination.
 
 ## Current Status
 
 - **Workflow cohesion v3 (P0–P8) is complete.** Normalized IDs and statuses, unified preview/request with summary, Shiftboard primary + NL parse, partner consent, coverage fill (candidates + assign), My Requests, and 48h escalation are implemented.
 - Auth (X-Employee-Id, admin role, login, scoped visibility) is in place. System is runnable with Docker + Ollama; first request may be slow until model is loaded.
+- **Deployment-ready for Railway:** CD workflow, Alembic migrations, Claude-first hosted config, CI gates (Ruff, audit, gitleaks), and deployment/domain/migration docs are in place. Configure GitHub and Railway secrets/vars and run first deploy; custom domain can be added later.
 
 ## Known Issues
 
 - None critical. If Ollama returns empty or non-JSON, EXTRACTION_INVALID_SCHEMA with developerMessage indicates the cause.
 - Re-running seed deletes shifts in the seeded date range; intentional for idempotent reset.
 - New ScheduleRequest columns: existing DBs need migration or reset before creating new requests.
+- npm audit reports moderate/high vulnerabilities (e.g. serve, vite deps); CI uses `--audit-level=critical` so job passes; address with `npm audit fix` or dependency updates when convenient.
 
 ## Evolution of Project Decisions
 
@@ -59,3 +65,4 @@
 - **Workflow cohesion v3:** Normalized requester/partner/shift IDs on ScheduleRequest; status lifecycle; unified preview/request; Shiftboard primary; partner consent; coverage fill; My Requests; 48h urgent.
 - **Guided completion:** Preview (text) returns 200 with needsInput instead of 400 for missing date/shift type; ExtractionService.parse_lenient + _collect_needs_input; no UUIDs in LLM context (_build_requester_context). Single input area on Shiftboard; structured form under "Review details (optional)". Production LLM: use hosted provider; Ollama is dev-only, run on host by default (make ollama-serve, ollama-check; optional make up-ollama).
 - **Test operations policy:** Default dev/PR test feedback excludes live-LLM tests for speed/stability; live provider coverage remains in dedicated opt-in CI lane.
+- **Deployment plan (v2):** Railway staging + production; optional prod promotion; Alembic for schema; Claude-first hosted LLM; CI expanded with Ruff, pip/npm audit, gitleaks; workflow-coverage audit and placeholder tests documented with agent handoff prompts; LLM-edge test tightening deferred (backlog).
