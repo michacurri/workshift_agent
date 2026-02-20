@@ -17,6 +17,15 @@
 - **Test scaffolding:** `backend/tests/` with unit/ and integration/ markers; pytest.ini; `make test`, `make test-unit`, `make test-integration`. Strategy and TDD/CI hooks in `docs/testing.md` (user stories from Product to drive integration scenarios).
 - **Test lane split implemented:** Added `integration_llm` marker and moved live-LLM error-path test into that lane. Fast/default commands exclude live-LLM tests; full suite remains available. New commands: `make test-all`, `make test-integration-fast`, `make test-integration-llm`, `make test-integration-all`.
 - **CI workflow added:** `.github/workflows/ci.yml` now runs fast lane on PR/push and live-LLM lane on nightly/manual/main events.
+- **Frontend unit-test stack implemented:** Vitest + React Testing Library + jsdom are configured in `frontend/`; scripts include `test`, `test:watch`, `test:coverage`, and `typecheck`.
+- **Frontend test coverage implemented (Gherkin/JTBD style):**
+  - `frontend/src/api.test.ts` (sanitize normalization, auth header injection, error fallback)
+  - `frontend/src/auth.test.tsx` (hydration, persistence/removal, provider guard)
+  - `frontend/src/hooks/request.hook.test.tsx` (empty/no-op, needsInput block, happy path)
+  - `frontend/src/hooks/approvals.hook.test.tsx` (load success/failure, action + refresh)
+  - `frontend/src/hooks/shiftBoard.hook.test.tsx` (parse hydrate, preview/submit flow, deterministic fixed-clock behavior)
+  - `frontend/src/pages/Login.test.tsx`, `frontend/src/pages/MyRequests.test.tsx`, `frontend/src/pages/ShiftBoard.test.tsx`
+- **Frontend CI/ops integration:** root `Makefile` now has `make test-frontend-unit`; CI has a separate `Frontend Unit Tests` job (Node setup, `npm run typecheck`, `npm test` in `frontend/`).
 - **Coverage permission tests stabilized:** non-admin 403 tests in coverage flow now select any available shift ID in seeded range, eliminating brittle skip conditions tied to specific seeded assignment assumptions.
 
 ## What's Left to Build
@@ -24,6 +33,7 @@
 - **v2 (optional):** LLM ranking/explanations over deterministic candidate lists; iterative schedule draft generation with deterministic validation and admin approval (per plan).
 - **DB migration/reset:** New ScheduleRequest columns require DB reset or migration for POC; then `make db-reset` and re-seed.
 - **Tests:** Continue expanding real unit and integration coverage driven by user stories; keep deterministic tests in fast lane and LLM-dependent tests in `integration_llm` lane.
+- **Frontend tests:** Expand Gherkin/JTBD scenario coverage for additional pages/hooks as features evolve.
 - Other (optional): Circuit breaker, pagination, Alembic migrations.
 
 ## Current Status

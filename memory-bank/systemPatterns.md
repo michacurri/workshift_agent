@@ -27,7 +27,7 @@
 - **Test stratification pattern:** Marker-based test lanes separate deterministic API behavior from live-provider behavior:
   - `integration` = deterministic HTTP integration tests
   - `integration_llm` = live LLM-dependent integration tests (slow, opt-in)
-  Make/CI lanes are built on this marker split.
+  Make/CI lanes are built on this marker split; frontend uses a separate deterministic Vitest lane in PR/push CI.
 
 ## Component Relationships
 
