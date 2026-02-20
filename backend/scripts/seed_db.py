@@ -33,7 +33,6 @@ from backend.models import Employee, EmployeeRole, Shift, ShiftType
 # One account is admin for dev/testing: Priya Smith (role=admin). Others are employee.
 
 def get_employees():
-    today = date.today()
     return [
         {
             "first_name": "John",
