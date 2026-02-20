@@ -36,7 +36,7 @@ Gaps:
 
 - Some permissive assertions reduce confidence (e.g., allowing multiple status codes).
 - Limited strict checks around urgency ordering and partner visibility edge cases.
-- Placeholder tests remain in `backend/tests/unit/test_placeholder.py` and `backend/tests/integration/test_placeholder.py`.
+- Placeholder tests were replaced with minimal real tests: unit `test_placeholder.py` now tests `time_utils.org_tz()`; integration `test_placeholder.py` now has a GET `/health` smoke test.
 
 ## Prioritized Next Tests (recommended)
 

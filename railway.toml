@@ -1,0 +1,12 @@
+# Used by the backend service when Root Directory is repo root (empty).
+# Builds with Dockerfile.backend so /app/backend/ exists and "uvicorn backend.main:app" works.
+# Frontend service uses Root Directory = "frontend" and frontend/railway.toml.
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile.backend"
+
+[deploy]
+healthcheckPath = "/health"
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10
