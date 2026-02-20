@@ -61,7 +61,6 @@ jobs:
         working-directory: frontend
         run: |
           npm ci
-          npm audit fix
           npm audit --omit=dev --audit-level=critical
 
   secret-scan:
