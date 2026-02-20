@@ -1,4 +1,5 @@
 import json
+from datetime import date
 from typing import Any
 
 import httpx
@@ -13,11 +14,12 @@ PROMPT_TEMPLATE = """You must respond with only a single JSON object and nothing
 Use this exact schema (use null when unknown):
 {{"employee_first_name":"string","employee_last_name":"string or null","current_shift_date":"YYYY-MM-DD or null","current_shift_type":"morning or night or null","target_date":"YYYY-MM-DD or null","target_shift_type":"morning or night or null","requested_action":"swap or move or cover or null","reason":"string or null","partner_employee_first_name":"string or null","partner_employee_last_name":"string or null","partner_shift_date":"YYYY-MM-DD or null","partner_shift_type":"morning or night or null"}}
 For swap requests: set employee_* to the requester, partner_* to the swap partner, current_shift_* to requester's shift, target_* and partner_shift_* to partner's shift.
+For cover requests: current_shift_date is the date of the shift to be covered (the requester's shift). If the user says "tomorrow" or "my shift tomorrow", set both current_shift_date and target_date to tomorrow (today + 1 day).
+{date_context}
 
 User request: {text}
 
 JSON:"""
-
 
 class OllamaProvider(LLMProvider):
     def __init__(self) -> None:
@@ -29,11 +31,23 @@ class OllamaProvider(LLMProvider):
         self.provider_name = "ollama"
         self.extraction_version = f"ollama-{self.model_name}-v1"
 
-    async def parse(self, text: str, requester_context: str | None = None) -> ParsedExtraction:
+    async def parse(
+        self,
+        text: str,
+        requester_context: str | None = None,
+        reference_date: date | None = None,
+    ) -> ParsedExtraction:
         context_line = ""
         if requester_context:
             context_line = f"\nRequester context: {requester_context}\n"
-        prompt = PROMPT_TEMPLATE.format(text=text + context_line)
+        date_context = ""
+        if reference_date is not None:
+            date_context = (
+                f"Today's date is {reference_date.isoformat()}. "
+                "Valid scheduling window is today through 30 days from today. "
+                "For relative dates like 'tomorrow' use today + 1 day. Prefer null if uncertain."
+            )
+        prompt = PROMPT_TEMPLATE.format(date_context=date_context, text=text + context_line)
         payload = {"model": self.model_name, "prompt": prompt, "stream": False}
 
         for attempt in range(self.max_retries + 1):
@@ -69,6 +83,20 @@ class OllamaProvider(LLMProvider):
                     400,
                 ) from exc
             except httpx.HTTPError as exc:
+                if isinstance(exc, httpx.HTTPStatusError) and exc.response is not None:
+                    if exc.response.status_code == 404:
+                        body = ""
+                        try:
+                            body = exc.response.text or ""
+                        except Exception:
+                            body = ""
+                        if "model" in body.lower() and "not found" in body.lower():
+                            raise AppError(
+                                ErrorCode.llm_provider_error,
+                                "Language model is not installed yet. Please install it and retry.",
+                                f"Ollama model '{self.model_name}' not found. Response: {body}",
+                                503,
+                            ) from exc
                 if attempt >= self.max_retries:
                     raise AppError(
                         ErrorCode.llm_provider_error,
@@ -83,6 +111,15 @@ class OllamaProvider(LLMProvider):
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 response = await client.get(f"{self.base_url}/api/tags")
             response.raise_for_status()
+            data = response.json()
+            models = data.get("models") if isinstance(data, dict) else None
+            names: list[str] = []
+            if isinstance(models, list):
+                for m in models:
+                    if isinstance(m, dict) and isinstance(m.get("name"), str):
+                        names.append(m["name"])
+            if self.model_name and self.model_name not in names:
+                return HealthStatus(status="fail", last_error=f"Model '{self.model_name}' not installed (ollama pull required).")
             return HealthStatus(status="ok")
         except Exception as exc:  # noqa: BLE001
             return HealthStatus(status="fail", last_error=str(exc))

@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  schedule:
+    - cron: "0 5 * * *"
+  workflow_dispatch:
+
+jobs:
+  test-fast:
+    name: Unit + Integration Fast
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare env file
+        run: |
+          if [ ! -f .env ]; then cp .env.example .env; fi
+
+      - name: Start stack
+        run: make up
+
+      - name: Seed database
+        run: make seed
+
+      - name: Run unit tests
+        run: make test-unit
+
+      - name: Run integration fast lane
+        run: make test-integration-fast
+
+      - name: Stop stack
+        if: always()
+        run: make down
+
+  test-integration-llm:
+    name: Integration LLM Lane
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare env file
+        run: |
+          if [ ! -f .env ]; then cp .env.example .env; fi
+
+      - name: Start stack
+        run: make up
+
+      - name: Seed database
+        run: make seed
+
+      - name: Run live-LLM integration lane
+        run: make test-integration-llm
+
+      - name: Stop stack
+        if: always()
+        run: make down

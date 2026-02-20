@@ -9,14 +9,15 @@ import type {
   ShiftsResponse,
   ShiftCandidateOut,
   StructuredRequestIn,
-  RuleEngineResult,
 } from "./types";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 
 interface ApiErrorBody {
+  errorCode?: string;
   userMessage?: string;
   developerMessage?: string;
+  correlationId?: string;
 }
 
 function getCurrentEmployeeId(): string | null {
@@ -49,6 +50,20 @@ async function call<T>(path: string, options: RequestInit = {}): Promise<T> {
     );
   }
   return data as T;
+}
+
+function sanitizeStructured(body: StructuredRequestIn): StructuredRequestIn {
+  const out: StructuredRequestIn = { ...body };
+  const nullIfEmpty = (v: string | null | undefined) => (v === "" ? null : v);
+
+  out.employee_last_name = nullIfEmpty(out.employee_last_name);
+  out.current_shift_date = nullIfEmpty(out.current_shift_date);
+  out.target_date = nullIfEmpty(out.target_date);
+  out.partner_shift_date = nullIfEmpty(out.partner_shift_date);
+  out.partner_employee_first_name = nullIfEmpty(out.partner_employee_first_name);
+  out.partner_employee_last_name = nullIfEmpty(out.partner_employee_last_name);
+  out.reason = nullIfEmpty(out.reason);
+  return out;
 }
 
 export function submitRequest(text: string): Promise<ScheduleRequestOut> {
@@ -118,13 +133,13 @@ export function previewUnified(payload: { text?: string; structured?: Structured
 }
 
 export function previewStructured(body: StructuredRequestIn): Promise<PreviewResponse> {
-  return previewUnified({ structured: body });
+  return previewUnified({ structured: sanitizeStructured(body) });
 }
 
 export function submitStructured(body: StructuredRequestIn): Promise<ScheduleRequestOut> {
   return call<ScheduleRequestOut>("/schedule/request/structured", {
     method: "POST",
-    body: JSON.stringify(body),
+    body: JSON.stringify(sanitizeStructured(body)),
   });
 }
 

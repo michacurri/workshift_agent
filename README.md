@@ -94,52 +94,96 @@ Error payload format:
 - `validation_time_avg` = `validated_at - parsed_at`
 - `approval_latency_avg` = `approved_at - validated_at`
 
-## Run Locally
+## Run Locally (Makefile)
 
-1. Copy `.env.example` to `.env` and update values.
-2. Start services:
-   - `docker compose up --build`
-3. Backend API: `http://localhost:8000`
-4. Health check: `http://localhost:8000/health`
+All common workflows are available via `make` from the repo root. Run `make help` to list targets.
 
-### Seeding the database
-
-From the project root (with Postgres reachable and `DATABASE_URL` set, e.g. in `.env` or when running in the backend container):
+### First run
 
 ```bash
-python -m backend.scripts.seed_db
+make bootstrap && make up && make seed
 ```
 
-Or inside the backend container:
+- **`make bootstrap`** — Creates `.env` from `.env.example` if missing; installs frontend deps if needed.
+- **`make up`** — Starts backend, Postgres, and Redis in the background.
+- **`make seed`** — Seeds the database (employees + shifts). Idempotent; safe to re-run.
+
+Backend API: `http://localhost:8000`. Health: `http://localhost:8000/health`.
+
+### Ollama (host) — for natural-language parsing
+
+The app uses Ollama on your **host machine** (not in Docker). Use this workflow so `make restart` works with NL parsing:
+
+1. **Install Ollama** on your machine: [ollama.com](https://ollama.com) (or `curl -fsSL https://ollama.com/install.sh | sh` on Linux).
+2. **Pull the model once:**  
+   `ollama pull llama3:8b`  
+   (Or whatever you set as `OLLAMA_MODEL` in `.env`.)
+3. **Start Ollama in a separate terminal** (keep it running while you dev):  
+   `ollama serve`  
+   If the backend (e.g. in Docker) cannot reach Ollama, try:  
+   `OLLAMA_HOST=0.0.0.0:11434 ollama serve`  
+   (Needed on some WSL2/Linux setups; on macOS plain `ollama serve` often works.)
+4. **Start the stack:** `make up` (or `make restart`).  
+   Your `.env` should have `OLLAMA_BASE_URL=http://host.docker.internal:11434` (this is the default in `.env.example`).
+
+**Quick reference:** run `make ollama-serve` to print these steps. After the stack is up, run `make ollama-check` to verify the backend can reach Ollama.
+
+### Daily dev
+
+- Start Ollama (if you need NL): `ollama serve` in one terminal (use `OLLAMA_HOST=0.0.0.0:11434 ollama serve` only if the backend can’t reach it).
+- Start stack: `make up` (or `make restart` to fully cycle backend/Postgres/Redis).
+- View backend logs: `make logs-backend`
+- Stop stack: `make down` (Ollama keeps running on the host until you stop it.)
+
+### Database
+
+- **Seed (or re-seed):** `make seed`
+- **Schema changed / clean state:** `make db-reset` — Stops stack, removes volumes, brings it back up, then seeds. Use after model or migration changes.
+
+### Shells and exec
+
+- Postgres: `make psql`
+- Redis: `make redis-cli`
+- Backend container shell: `make backend-sh`
+
+### Tests
+
+Stack must be up (`make up`) and seeded (`make seed`) before running tests.
+
+- **All tests:** `make test`
+- **Unit only:** `make test-unit`
+- **Integration only:** `make test-integration`
+
+See [docs/testing.md](docs/testing.md) for the full testing strategy, TDD workflow, and CI hooks.
+
+### Frontend
+
+Frontend runs locally with Vite for fast reloads:
 
 ```bash
-docker compose exec backend python -m backend.scripts.seed_db
+make frontend-dev
 ```
+
+Or manually: `cd frontend && npm install && npm run dev`.
+
+### Seeding (details)
 
 Seed data includes:
 
 - **Normal:** John, Priya, Alex (for happy-path schedule requests and approvals).
 - **Edge cases:** `ExpiredCert` (triggers `RULE_CERT_EXPIRED`), `NoAdvanced` (for `RULE_SKILL_MISMATCH` when a shift requires `advanced`). A few shifts are created (assigned and open) for conflict and skill tests.
 
-Re-running the script updates existing seed employees and re-creates shifts in the near-future date range.
+Re-running the seed updates existing seed employees and re-creates shifts in the near-future date range.
 
-Frontend:
+## Switching Providers (LLM)
 
-1. `cd frontend`
-2. `npm install`
-3. `npm run dev`
+LLM is optional: structured (non–free-text) flows work without any LLM. For natural-language parsing you can use:
 
-## Switching Providers
+- **Host Ollama (default for dev):** Run Ollama on your host; see [Ollama (host)](#ollama-host--for-natural-language-parsing) above. `.env`: `LLM_PROVIDER=local`, `OLLAMA_BASE_URL=http://host.docker.internal:11434`.
+- **Ollama in Docker (optional):** `make up-ollama` then `make ollama-pull` once. In `.env` set `OLLAMA_BASE_URL=http://ollama:11434`. Use if you prefer not to run Ollama on the host.
+- **Hosted (e.g. OpenAI, production):** In `.env`: `LLM_PROVIDER=hosted`, set `OPENAI_API_KEY`; optional `OPENAI_BASE_URL`, `OPENAI_MODEL`. No local Ollama needed.
 
-- Local Ollama:
-  - `LLM_PROVIDER=local`
-  - `OLLAMA_BASE_URL=http://host.docker.internal:11434`
-- Hosted:
-  - `LLM_PROVIDER=hosted`
-  - set `OPENAI_API_KEY`
-  - optional `OPENAI_BASE_URL`, `OPENAI_MODEL`
-
-No route/service code changes are required.
+No route/service code changes are required when switching.
 
 ## Example Requests
 

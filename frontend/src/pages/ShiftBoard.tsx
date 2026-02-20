@@ -92,24 +92,26 @@ export default function ShiftBoard() {
       </div>
 
       <div style={{ marginBottom: 24 }}>
-        <h3>Paste message (NL parse)</h3>
+        <h3>Describe your request (or paste a message)</h3>
         <p style={{ fontSize: 14, color: "#555" }}>
-          Paste a message like &quot;I need coverage for my morning shift on 2025-02-20&quot; or &quot;Swap with Jane for Feb 22&quot;, then click Parse.
+          Type or paste a message like &quot;I need coverage for my night shift on 2025-02-20&quot; or
+          &quot;Swap my Feb 22 morning with Alex&apos;s Feb 23 night&quot;, then click Preview.
         </p>
         <textarea
           ref={pasteRef}
           rows={3}
           placeholder="e.g. I need someone to cover my night shift on 2025-02-20"
-          style={{ width: "100%", maxWidth: 500, display: "block", marginBottom: 8 }}
+          style={{ width: "100%", maxWidth: 650, display: "block", marginBottom: 8 }}
         />
-        <button type="button" onClick={handleParsePaste}>
-          Parse
+        <button type="button" disabled={loading} onClick={handleParsePaste}>
+          Preview
         </button>
       </div>
 
-      <form onSubmit={onPreview}>
-        <h3>Propose move / swap / request coverage</h3>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
+      <details style={{ marginBottom: 24 }}>
+        <summary style={{ cursor: "pointer", fontWeight: 600 }}>Review details (optional)</summary>
+        <form onSubmit={onPreview} style={{ marginTop: 12 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
           <div>
             <label>
               Requester first name
@@ -240,13 +242,27 @@ export default function ShiftBoard() {
             {submitting ? "Submitting..." : "Submit for approval"}
           </button>
         </div>
-      </form>
+        </form>
+      </details>
 
       {previewResult && (
         <div style={{ marginTop: 16, padding: 16, border: "1px solid #ddd", borderRadius: 8 }}>
           <h3>Preview</h3>
           {previewResult.summary && (
             <p style={{ fontSize: 16, fontWeight: 600, marginBottom: 12 }}>{previewResult.summary}</p>
+          )}
+          {previewResult.needsInput && previewResult.needsInput.length > 0 && (
+            <div style={{ marginBottom: 12, padding: 12, border: "1px solid #ffe1a6", background: "#fff7e6", borderRadius: 8 }}>
+              <div style={{ fontWeight: 600, marginBottom: 6 }}>One more detail needed</div>
+              <ul style={{ margin: 0, paddingLeft: 18 }}>
+                {previewResult.needsInput.map((n) => (
+                  <li key={n.field}>
+                    {n.prompt}
+                    {n.options && n.options.length > 0 ? ` (${n.options.join(" / ")})` : ""}
+                  </li>
+                ))}
+              </ul>
+            </div>
           )}
           <p>
             <strong>Valid:</strong> {previewResult.validation.valid ? "Yes" : "No"}

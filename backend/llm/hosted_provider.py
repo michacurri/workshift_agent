@@ -1,4 +1,5 @@
 import json
+from datetime import date
 from typing import Any
 
 import httpx
@@ -26,6 +27,8 @@ Schema:
   "partner_shift_type": "morning|night|null"
 }}
 For swap: employee_*=requester, partner_*=swap partner, current_shift_*=requester shift, target_* and partner_shift_*=partner shift.
+For cover: current_shift_date is the date of the shift to be covered. If the user says "tomorrow" or "my shift tomorrow", set both current_shift_date and target_date to tomorrow (today + 1 day).
+{date_context}
 User text: {text}
 """
 
@@ -41,7 +44,12 @@ class HostedProvider(LLMProvider):
         self.provider_name = "hosted"
         self.extraction_version = f"hosted-{self.model_name}-v1"
 
-    async def parse(self, text: str, requester_context: str | None = None) -> ParsedExtraction:
+    async def parse(
+        self,
+        text: str,
+        requester_context: str | None = None,
+        reference_date: date | None = None,
+    ) -> ParsedExtraction:
         if not self.api_key:
             raise AppError(
                 ErrorCode.llm_provider_error,
@@ -52,9 +60,16 @@ class HostedProvider(LLMProvider):
         context_line = ""
         if requester_context:
             context_line = f"\nRequester context: {requester_context}\n"
+        date_context = ""
+        if reference_date is not None:
+            date_context = (
+                f"Today's date is {reference_date.isoformat()}. "
+                "Valid scheduling window is today through 30 days from today. "
+                "For relative dates like 'tomorrow' use today + 1 day. Prefer null if uncertain."
+            )
         payload = {
             "model": self.model_name,
-            "messages": [{"role": "user", "content": PROMPT_TEMPLATE.format(text=text + context_line)}],
+            "messages": [{"role": "user", "content": PROMPT_TEMPLATE.format(date_context=date_context, text=text + context_line)}],
             "temperature": 0,
             "response_format": {"type": "json_object"},
         }

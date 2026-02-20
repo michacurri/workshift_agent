@@ -6,10 +6,12 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from sqlalchemy.exc import IntegrityError
 
 from backend.config import get_settings
 from backend.db import init_db
 from backend.errors import AppError
+from backend.schemas import ErrorCode
 from backend.routers import approval, employees, health, metrics, partner, schedule
 
 logging.basicConfig(
@@ -78,6 +80,21 @@ async def app_error_handler(request: Request, exc: AppError):
             "errorCode": exc.error_code.value,
             "userMessage": exc.user_message,
             "developerMessage": exc.developer_message,
+            "correlationId": correlation_id,
+        },
+    )
+
+
+@app.exception_handler(IntegrityError)
+async def integrity_error_handler(request: Request, exc: IntegrityError):
+    correlation_id = getattr(request.state, "correlation_id", str(uuid.uuid4()))
+    # Return a CORS-safe JSON response so the browser doesn't surface as "Failed to fetch".
+    return JSONResponse(
+        status_code=409,
+        content={
+            "errorCode": ErrorCode.db_error.value,
+            "userMessage": "Request could not be saved due to a database constraint. Please retry.",
+            "developerMessage": f"IntegrityError: {str(exc)[:500]}",
             "correlationId": correlation_id,
         },
     )

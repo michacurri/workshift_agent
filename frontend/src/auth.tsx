@@ -3,6 +3,8 @@ import React, { createContext, useContext, useEffect, useState } from "react";
 export type CurrentUser = {
   id: string;
   full_name: string;
+  first_name: string;
+  last_name: string;
   role: "employee" | "admin";
 };
 

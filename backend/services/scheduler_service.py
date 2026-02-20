@@ -1,9 +1,10 @@
 import hashlib
 import json
 import uuid
-from datetime import UTC, datetime, date, timedelta, timezone
+from datetime import UTC, datetime, date, timedelta
 
 from sqlalchemy import and_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.db import redis_client
@@ -27,6 +28,7 @@ from backend.schemas import (
 )
 from backend.services.extraction_service import ExtractionService
 from backend.services.rule_engine import RuleEngine
+from backend.time_utils import org_now, org_tz
 
 
 class SchedulerService:
@@ -84,7 +86,28 @@ class SchedulerService:
             coverage_shift_id=cov_shift_id,
         )
         session.add(schedule_request)
-        await session.flush()
+        try:
+            await session.flush()
+        except IntegrityError as exc:
+            await session.rollback()
+            existing = await session.scalar(select(ScheduleRequest).where(ScheduleRequest.fingerprint == fingerprint))
+            if existing:
+                self._enforce_requester_matches_current_user(existing.validated_extraction, current_user)
+                rule_result = await self.rule_engine.validate_request(session, extraction.validated)
+                return ScheduleRequestOut(
+                    requestId=existing.id,
+                    status=existing.status.value,
+                    extractionVersion=existing.extraction_version,
+                    parsed=existing.validated_extraction,
+                    validation=rule_result,
+                    approvalId=str(existing.id)
+                    if existing.status in (RequestStatus.pending, RequestStatus.pending_admin)
+                    else None,
+                    correlationId=correlation_id,
+                    idempotentHit=True,
+                    summary=self._build_summary(existing.validated_extraction, rule_result),
+                )
+            raise exc
 
         session.add(
             RequestMetrics(
@@ -158,9 +181,33 @@ class SchedulerService:
     ) -> PreviewResponse:
         """Unified preview: accept text or structured; return parsed, validation, summary."""
         if payload.text and payload.text.strip():
-            extraction = await self.extraction_service.extract(session, payload.text.strip(), current_user=current_user)
-            validated_dict = extraction.validated.model_dump(mode="json")
-            rule_result = await self.rule_engine.validate_request(session, extraction.validated)
+            if current_user is None:
+                raise AppError(
+                    ErrorCode.validation_error,
+                    "Authentication is required for preview.",
+                    "current_user was null in preview_unified(text).",
+                    401,
+                )
+            parsed, needs = await self.extraction_service.parse_lenient(
+                session=session,
+                text=payload.text.strip(),
+                current_user=current_user,
+            )
+            parsed_dict = parsed.model_dump(mode="json")
+            if needs:
+                rule_result = RuleEngineResult(
+                    valid=False,
+                    errorCodes=[ErrorCode.validation_error],
+                    reason="Additional information required to preview this request.",
+                    suggestions=[],
+                    validationDetails={"needsInput": [n.model_dump() for n in needs]},
+                )
+                summary = self._build_summary(parsed_dict, rule_result)
+                return PreviewResponse(parsed=parsed_dict, validation=rule_result, summary=summary, needsInput=needs)
+
+            validated = self.extraction_service._apply_defaults(parsed)
+            validated_dict = validated.model_dump(mode="json")
+            rule_result = await self.rule_engine.validate_request(session, validated)
         else:
             st = payload.structured
             parsed = ParsedExtraction(
@@ -181,7 +228,7 @@ class SchedulerService:
             validated_dict = validated.model_dump(mode="json")
             rule_result = await self.rule_engine.validate_request(session, validated)
         summary = self._build_summary(validated_dict, rule_result)
-        return PreviewResponse(parsed=validated_dict, validation=rule_result, summary=summary)
+        return PreviewResponse(parsed=validated_dict, validation=rule_result, summary=summary, needsInput=[])
 
     async def process_structured_request(
         self,
@@ -232,6 +279,8 @@ class SchedulerService:
         status, partner_id, req_shift_id, part_shift_id, cov_shift_id = await self._resolve_normalized_ids_and_status(
             session, validated, current_user, rule_result.valid
         )
+        # Structured requests bypass ExtractionService.extract(); ensure extraction_versions FK target exists.
+        await self.extraction_service._ensure_version(session)
 
         schedule_request = ScheduleRequest(
             raw_text="(structured)",
@@ -248,7 +297,28 @@ class SchedulerService:
             coverage_shift_id=cov_shift_id,
         )
         session.add(schedule_request)
-        await session.flush()
+        try:
+            await session.flush()
+        except IntegrityError as exc:
+            await session.rollback()
+            existing = await session.scalar(select(ScheduleRequest).where(ScheduleRequest.fingerprint == fingerprint))
+            if existing:
+                self._enforce_requester_matches_current_user(existing.validated_extraction, current_user)
+                rule_result = await self.rule_engine.validate_request(session, validated)
+                return ScheduleRequestOut(
+                    requestId=existing.id,
+                    status=existing.status.value,
+                    extractionVersion=existing.extraction_version,
+                    parsed=existing.validated_extraction,
+                    validation=rule_result,
+                    approvalId=str(existing.id)
+                    if existing.status in (RequestStatus.pending, RequestStatus.pending_admin)
+                    else None,
+                    correlationId=correlation_id,
+                    idempotentHit=True,
+                    summary=self._build_summary(existing.validated_extraction, rule_result),
+                )
+            raise exc
 
         session.add(
             RequestMetrics(
@@ -428,7 +498,7 @@ class SchedulerService:
         result = await session.execute(stmt)
         rows = result.scalars().all()
         unresolved = {RequestStatus.pending_partner, RequestStatus.pending_admin, RequestStatus.pending_fill, RequestStatus.pending}
-        now = datetime.now(timezone.utc)
+        now = org_now()
         cutoff = now + timedelta(hours=48)
         items = []
         for req in rows:
@@ -453,7 +523,7 @@ class SchedulerService:
                             shift_date = d if isinstance(d, date) else date.fromisoformat(str(d))
                             break
                 if shift_date is not None:
-                    shift_start = datetime.combine(shift_date, datetime.min.time(), tzinfo=timezone.utc)
+                    shift_start = datetime.combine(shift_date, datetime.min.time(), tzinfo=org_tz())
                     urgent = shift_start <= cutoff
             items.append(
                 ScheduleRequestListItem(
@@ -522,9 +592,17 @@ class SchedulerService:
                 ShiftType(validated.current_shift_type.value),
                 assigned_employee_id=current_user.id,
             )
+            if shift_cov is None and validated.target_date and validated.target_shift_type:
+                shift_cov = await self._get_shift(
+                    session,
+                    validated.target_date,
+                    ShiftType(validated.target_shift_type.value),
+                    assigned_employee_id=current_user.id,
+                )
             if shift_cov:
                 cov_shift_id = shift_cov.id
-            return RequestStatus.pending_fill, None, None, None, cov_shift_id
+                req_shift_id = shift_cov.id
+            return RequestStatus.pending_fill, None, req_shift_id, None, cov_shift_id
 
         return RequestStatus.pending_admin, None, None, None, None
 
@@ -545,6 +623,12 @@ class SchedulerService:
         """Human-readable one-line summary for UI."""
         action = parsed.get("requested_action") or "move"
         req_name = " ".join(filter(None, [parsed.get("employee_first_name"), parsed.get("employee_last_name")])) or "Requester"
+        if not parsed.get("target_date"):
+            if action == "cover":
+                return f"Request coverage for {req_name} (date needed)"
+            if action == "swap":
+                return f"Swap request for {req_name} (details needed)"
+            return f"Move request for {req_name} (date needed)"
         target = f"{parsed.get('target_date')} {parsed.get('target_shift_type', '')}"
         if action == "swap":
             partner_name = " ".join(filter(None, [parsed.get("partner_employee_first_name"), parsed.get("partner_employee_last_name")])) or "Partner"
@@ -578,7 +662,7 @@ class SchedulerService:
     @staticmethod
     def _enforce_requester_matches_current_user(parsed: dict, current_user: Employee) -> None:
         """Ensure the request is for the current user unless they are an admin."""
-        if current_user.role == current_user.role.admin:  # type: ignore[attr-defined]
+        if current_user.role == EmployeeRole.admin:
             return
         requester_first = (parsed.get("employee_first_name") or "").strip()
         requester_last = (parsed.get("employee_last_name") or "").strip()

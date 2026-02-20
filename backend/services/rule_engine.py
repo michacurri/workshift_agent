@@ -83,10 +83,28 @@ class RuleEngine:
                 if not cert_ok:
                     errors.append(ErrorCode.rule_cert_expired)
             target_shift_type = ShiftType(extraction.target_shift_type.value)
-            allowed_assignee_id = employee.id if (employee and extraction.requested_action == RequestedActionEnum.cover) else None
-            conflict = await self.check_shift_conflict(
-                session, extraction.target_date, target_shift_type, allowed_assignee_id=allowed_assignee_id
-            )
+            conflict = False
+            if employee:
+                # For cover: conflict only if the shift is taken by someone other than the requester.
+                # Explicitly check requester's shift first so we don't falsely conflict when they own it.
+                if extraction.requested_action == RequestedActionEnum.cover:
+                    requester_shift = await session.scalar(
+                        select(Shift).where(
+                            and_(
+                                Shift.date == extraction.target_date,
+                                Shift.type == target_shift_type,
+                                Shift.assigned_employee_id == employee.id,
+                            )
+                        )
+                    )
+                    if requester_shift is None:
+                        conflict = await self.check_shift_conflict(
+                            session, extraction.target_date, target_shift_type, allowed_assignee_id=None
+                        )
+                else:
+                    conflict = await self.check_shift_conflict(
+                        session, extraction.target_date, target_shift_type, allowed_assignee_id=employee.id
+                    )
             if conflict:
                 errors.append(ErrorCode.rule_conflict)
                 suggestions = await self.suggest_alternative_employee(
@@ -130,20 +148,21 @@ class RuleEngine:
         first_name: str | None,
         last_name: str | None,
     ) -> list[Employee]:
-        """Resolve by first only, last only, or both. Returns 0, 1, or many."""
+        """Resolve by first only, last only, or both. Case-insensitive. Returns 0, 1, or many."""
         first = (first_name or "").strip() or None
         last = (last_name or "").strip() or None
         if not first and not last:
             return []
+        # Case-insensitive match so "john"/"doe" finds "John"/"Doe"
         if first and last:
             stmt = select(Employee).where(
-                Employee.first_name == first,
-                Employee.last_name == last,
+                Employee.first_name.ilike(first),
+                Employee.last_name.ilike(last),
             )
         elif first:
-            stmt = select(Employee).where(Employee.first_name == first)
+            stmt = select(Employee).where(Employee.first_name.ilike(first))
         else:
-            stmt = select(Employee).where(Employee.last_name == last)
+            stmt = select(Employee).where(Employee.last_name.ilike(last))
         result = await session.execute(stmt)
         return list(result.scalars().all())
 

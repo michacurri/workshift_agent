@@ -7,13 +7,14 @@ services:
       dockerfile: Dockerfile.backend
     ports:
       - "8000:8000"
+    env_file: .env
     environment:
+      # Container must use service names; override so env_file values for host don't leak
       DATABASE_URL: postgresql+asyncpg://user:password@postgres:5432/scheduler
       REDIS_URL: redis://redis:6379
-      LLM_PROVIDER: local
-      OLLAMA_BASE_URL: http://host.docker.internal:11434
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       DEV_MODE: "true"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       postgres:
         condition: service_healthy
@@ -33,6 +34,8 @@ services:
       POSTGRES_USER: user
       POSTGRES_PASSWORD: password
       POSTGRES_DB: scheduler
+    volumes:
+      - pgdata:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U user -d scheduler"]
       interval: 10s
@@ -49,3 +52,16 @@ services:
       timeout: 3s
       retries: 5
 
+  # Optional: use when running with --profile ollama; set OLLAMA_BASE_URL=http://ollama:11434 in .env
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollamadata:/root/.ollama
+    profiles:
+      - ollama
+
+volumes:
+  pgdata:
+  ollamadata:
