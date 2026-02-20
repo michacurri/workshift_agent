@@ -12,7 +12,7 @@ services:
       # Container must use service names; override so env_file values for host don't leak
       DATABASE_URL: postgresql+asyncpg://user:password@postgres:5432/scheduler
       REDIS_URL: redis://redis:6379
-      DEV_MODE: "true"
+      DEV_MODE: "false"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:

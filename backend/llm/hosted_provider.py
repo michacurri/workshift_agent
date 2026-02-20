@@ -36,13 +36,36 @@ User text: {text}
 class HostedProvider(LLMProvider):
     def __init__(self) -> None:
         settings = get_settings()
-        self.base_url = settings.openai_base_url.rstrip("/")
-        self.api_key = settings.openai_api_key
-        self.model_name = settings.openai_model
         self.timeout = settings.llm_hosted_timeout_seconds
         self.max_retries = settings.llm_max_retries
         self.provider_name = "hosted"
-        self.extraction_version = f"hosted-{self.model_name}-v1"
+        self.vendor = settings.hosted_llm_vendor
+
+        if self.vendor == "anthropic":
+            self.base_url = settings.anthropic_base_url.rstrip("/")
+            self.api_key = settings.anthropic_api_key
+            self.model_name = settings.anthropic_model
+            self.anthropic_version = settings.anthropic_version
+            if not self.api_key:
+                raise AppError(
+                    ErrorCode.llm_provider_error,
+                    "Hosted LLM provider is not configured.",
+                    "ANTHROPIC_API_KEY missing for hosted provider (vendor=anthropic).",
+                    500,
+                )
+            self.extraction_version = f"anthropic-{self.model_name}-v1"
+        else:
+            self.base_url = settings.openai_base_url.rstrip("/")
+            self.api_key = settings.openai_api_key
+            self.model_name = settings.openai_model
+            if not self.api_key:
+                raise AppError(
+                    ErrorCode.llm_provider_error,
+                    "Hosted LLM provider is not configured.",
+                    "OPENAI_API_KEY missing for hosted provider (vendor=openai).",
+                    500,
+                )
+            self.extraction_version = f"openai-{self.model_name}-v1"
 
     async def parse(
         self,
@@ -50,13 +73,6 @@ class HostedProvider(LLMProvider):
         requester_context: str | None = None,
         reference_date: date | None = None,
     ) -> ParsedExtraction:
-        if not self.api_key:
-            raise AppError(
-                ErrorCode.llm_provider_error,
-                "Hosted LLM provider is not configured.",
-                "OPENAI_API_KEY missing for hosted provider.",
-                500,
-            )
         context_line = ""
         if requester_context:
             context_line = f"\nRequester context: {requester_context}\n"
@@ -67,21 +83,60 @@ class HostedProvider(LLMProvider):
                 "Valid scheduling window is today through 30 days from today. "
                 "For relative dates like 'tomorrow' use today + 1 day. Prefer null if uncertain."
             )
-        payload = {
-            "model": self.model_name,
-            "messages": [{"role": "user", "content": PROMPT_TEMPLATE.format(date_context=date_context, text=text + context_line)}],
-            "temperature": 0,
-            "response_format": {"type": "json_object"},
-        }
-        headers = {"Authorization": f"Bearer {self.api_key}"}
 
         for attempt in range(self.max_retries + 1):
             try:
                 async with httpx.AsyncClient(timeout=self.timeout) as client:
-                    response = await client.post(f"{self.base_url}/chat/completions", headers=headers, json=payload)
-                response.raise_for_status()
-                body = response.json()
-                content = body["choices"][0]["message"]["content"]
+                    if self.vendor == "anthropic":
+                        headers = {
+                            "x-api-key": self.api_key,
+                            "anthropic-version": self.anthropic_version,
+                            "content-type": "application/json",
+                        }
+                        payload = {
+                            "model": self.model_name,
+                            "max_tokens": 1024,
+                            "temperature": 0,
+                            "messages": [
+                                {
+                                    "role": "user",
+                                    "content": PROMPT_TEMPLATE.format(
+                                        date_context=date_context,
+                                        text=text + context_line,
+                                    ),
+                                }
+                            ],
+                        }
+                        response = await client.post(f"{self.base_url}/v1/messages", headers=headers, json=payload)
+                        response.raise_for_status()
+                        body = response.json()
+                        content_blocks = body.get("content")
+                        content = ""
+                        if isinstance(content_blocks, list) and content_blocks:
+                            first = content_blocks[0]
+                            if isinstance(first, dict):
+                                content = str(first.get("text") or "").strip()
+                    else:
+                        headers = {"Authorization": f"Bearer {self.api_key}"}
+                        payload = {
+                            "model": self.model_name,
+                            "messages": [
+                                {
+                                    "role": "user",
+                                    "content": PROMPT_TEMPLATE.format(
+                                        date_context=date_context,
+                                        text=text + context_line,
+                                    ),
+                                }
+                            ],
+                            "temperature": 0,
+                            "response_format": {"type": "json_object"},
+                        }
+                        response = await client.post(f"{self.base_url}/chat/completions", headers=headers, json=payload)
+                        response.raise_for_status()
+                        body = response.json()
+                        content = body["choices"][0]["message"]["content"]
+
                 data = self._parse_json(content)
                 return ParsedExtraction.model_validate(data)
             except httpx.TimeoutException as exc:
@@ -110,12 +165,17 @@ class HostedProvider(LLMProvider):
         raise AppError(ErrorCode.llm_provider_error, "Hosted provider request failed.", "Unexpected retry exit.", 502)
 
     async def health_check(self) -> HealthStatus:
-        if not self.api_key:
-            return HealthStatus(status="fail", last_error="OPENAI_API_KEY missing")
         try:
-            headers = {"Authorization": f"Bearer {self.api_key}"}
             async with httpx.AsyncClient(timeout=self.timeout) as client:
-                response = await client.get(f"{self.base_url}/models", headers=headers)
+                if self.vendor == "anthropic":
+                    headers = {
+                        "x-api-key": self.api_key,
+                        "anthropic-version": self.anthropic_version,
+                    }
+                    response = await client.get(f"{self.base_url}/v1/models", headers=headers)
+                else:
+                    headers = {"Authorization": f"Bearer {self.api_key}"}
+                    response = await client.get(f"{self.base_url}/models", headers=headers)
             response.raise_for_status()
             return HealthStatus(status="ok")
         except Exception as exc:  # noqa: BLE001

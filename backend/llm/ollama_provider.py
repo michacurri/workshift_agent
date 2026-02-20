@@ -24,6 +24,13 @@ JSON:"""
 class OllamaProvider(LLMProvider):
     def __init__(self) -> None:
         settings = get_settings()
+        if not settings.ollama_base_url:
+            raise AppError(
+                ErrorCode.llm_provider_error,
+                "Local LLM provider is not configured.",
+                "OLLAMA_BASE_URL missing for local provider.",
+                500,
+            )
         self.base_url = settings.ollama_base_url.rstrip("/")
         self.model_name = settings.ollama_model
         self.timeout = settings.llm_parse_timeout_seconds

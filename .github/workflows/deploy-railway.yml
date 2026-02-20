@@ -1,0 +1,104 @@
+name: Deploy to Railway
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      promote_to_prod:
+        description: "Promote to production after staging smoke tests"
+        required: false
+        default: "false"
+
+concurrency:
+  group: deploy-railway-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  deploy-staging:
+    name: Deploy staging
+    runs-on: ubuntu-latest
+    container: ghcr.io/railwayapp/cli:latest
+    env:
+      RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+      RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID }}
+      RAILWAY_ENVIRONMENT: staging
+      RAILWAY_BACKEND_SERVICE: ${{ secrets.RAILWAY_BACKEND_SERVICE }}
+      RAILWAY_FRONTEND_SERVICE: ${{ secrets.RAILWAY_FRONTEND_SERVICE }}
+      STAGING_API_URL: ${{ secrets.STAGING_API_URL }}
+      STAGING_WEB_URL: ${{ secrets.STAGING_WEB_URL }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Link project (staging)
+        run: railway link --project "$RAILWAY_PROJECT_ID" --environment "$RAILWAY_ENVIRONMENT"
+
+      - name: Deploy backend (staging)
+        working-directory: backend
+        run: railway up --service "$RAILWAY_BACKEND_SERVICE" --environment "$RAILWAY_ENVIRONMENT" --ci
+
+      - name: Deploy frontend (staging)
+        working-directory: frontend
+        run: railway up --service "$RAILWAY_FRONTEND_SERVICE" --environment "$RAILWAY_ENVIRONMENT" --ci
+
+      - name: Smoke test backend (staging)
+        if: env.STAGING_API_URL != ''
+        run: |
+          set -euo pipefail
+          curl -fsS "$STAGING_API_URL/health" >/dev/null
+          curl -fsS "$STAGING_API_URL/health/db" >/dev/null
+          curl -fsS "$STAGING_API_URL/health/cache" >/dev/null
+
+      - name: Smoke test frontend route (staging)
+        if: env.STAGING_WEB_URL != ''
+        run: |
+          set -euo pipefail
+          curl -fsS "$STAGING_WEB_URL" >/dev/null
+
+  deploy-production:
+    name: Promote to production
+    needs: deploy-staging
+    runs-on: ubuntu-latest
+    container: ghcr.io/railwayapp/cli:latest
+    if: |
+      (github.event_name == 'workflow_dispatch' && inputs.promote_to_prod == 'true') ||
+      (github.event_name == 'push' && vars.AUTO_PROMOTE_PROD == 'true')
+    env:
+      RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+      RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID }}
+      RAILWAY_ENVIRONMENT: production
+      RAILWAY_BACKEND_SERVICE: ${{ secrets.RAILWAY_BACKEND_SERVICE }}
+      RAILWAY_FRONTEND_SERVICE: ${{ secrets.RAILWAY_FRONTEND_SERVICE }}
+      PROD_API_URL: ${{ secrets.PROD_API_URL }}
+      PROD_WEB_URL: ${{ secrets.PROD_WEB_URL }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Link project (production)
+        run: railway link --project "$RAILWAY_PROJECT_ID" --environment "$RAILWAY_ENVIRONMENT"
+
+      - name: Deploy backend (production)
+        working-directory: backend
+        run: railway up --service "$RAILWAY_BACKEND_SERVICE" --environment "$RAILWAY_ENVIRONMENT" --ci
+
+      - name: Deploy frontend (production)
+        working-directory: frontend
+        run: railway up --service "$RAILWAY_FRONTEND_SERVICE" --environment "$RAILWAY_ENVIRONMENT" --ci
+
+      - name: Smoke test backend (production)
+        if: env.PROD_API_URL != ''
+        run: |
+          set -euo pipefail
+          curl -fsS "$PROD_API_URL/health" >/dev/null
+          curl -fsS "$PROD_API_URL/health/db" >/dev/null
+          curl -fsS "$PROD_API_URL/health/cache" >/dev/null
+
+      - name: Smoke test frontend route (production)
+        if: env.PROD_WEB_URL != ''
+        run: |
+          set -euo pipefail
+          curl -fsS "$PROD_WEB_URL" >/dev/null
+

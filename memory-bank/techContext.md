@@ -11,7 +11,7 @@
 ## Development Setup
 
 - **Root:** Project root is repository root; backend and frontend are sibling dirs.
-- **Backend:** `backend/`; run via `uvicorn backend.main:app` or Docker. Requires `DATABASE_URL`, `REDIS_URL`, `LLM_PROVIDER`; optional Ollama/OpenAI env for LLM.
+- **Backend:** `backend/`; run via `uvicorn backend.main:app` or Docker. Requires `DATABASE_URL`, `REDIS_URL`, `LLM_PROVIDER`; optional Ollama/OpenAI env for LLM. Date-only semantics use `ORG_TIMEZONE` (default `America/Toronto`).
 - **Frontend:** `frontend/`; `npm install` then `npm run dev`. API base URL via `VITE_API_BASE_URL`; X-Employee-Id sent when user is logged in (localStorage currentUser).
 - **Frontend payloads:** Structured preview/submit normalizes optional fields (notably optional dates) so empty strings are sent as null to satisfy backend `date | None` validation.
 - **Makefile:** Repo root now has stratified test commands:
@@ -39,7 +39,7 @@
 
 ## Dependencies
 
-- **backend/requirements.txt:** fastapi, uvicorn[standard], sqlalchemy, asyncpg, redis, pydantic, pydantic-settings, httpx, pytest, pytest-asyncio.
+- **backend/requirements.txt:** fastapi, uvicorn[standard], sqlalchemy, asyncpg, redis, pydantic, pydantic-settings, httpx, pytest, pytest-asyncio, tzdata.
 - **backend/requirements-dev.txt:** extends requirements.txt for local test runs.
 - **frontend/package.json:** react, react-dom, vite (dev), Vitest + React Testing Library + jsdom for frontend unit/component tests.
 
@@ -53,4 +53,4 @@
   - frontend deterministic unit job (`npm run typecheck`, `npm test` in `frontend/`) for PR/push
   - fast lane (unit + integration-fast) for PR/push
   - live-LLM lane for nightly/manual/main branch events
-- **Config:** `backend/config.py` uses pydantic-settings. Optional: OPENAI_*, OLLAMA_*, LLM_* timeouts and retries.
+- **Config:** `backend/config.py` uses pydantic-settings. Optional: OPENAI_*, OLLAMA_*, LLM_* timeouts and retries. Date-only timezone is configured by `ORG_TIMEZONE` (default in `.env.example`: `America/Toronto`).
