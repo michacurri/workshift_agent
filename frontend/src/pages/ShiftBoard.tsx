@@ -8,7 +8,6 @@ export default function ShiftBoard() {
   const pasteRef = useRef<HTMLTextAreaElement>(null);
   const {
     dates,
-    shifts,
     loading,
     error,
     form,

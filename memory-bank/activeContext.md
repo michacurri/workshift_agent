@@ -7,6 +7,15 @@
 
 ## Recent Changes (Post–v3 UX and DX)
 
+- **Frontend unit testing baseline added (Vitest + RTL + jsdom):** `frontend/package.json` now includes `test`, `test:watch`, `test:coverage`, and `typecheck` scripts with Vitest + Testing Library dependencies. `frontend/vite.config.ts` now includes test config (`jsdom`, setup file, coverage defaults). Shared deterministic setup is in `frontend/src/test/setup.ts`.
+- **Gherkin/JTBD test language established for frontend:** New frontend tests use Product-readable scenario naming (`When / And / Then`) to map engineering assertions directly to jobs-to-be-done.
+- **Frontend test coverage added across high-signal areas:**
+  - API/auth unit tests: `frontend/src/api.test.ts`, `frontend/src/auth.test.tsx`
+  - Hook tests: `frontend/src/hooks/request.hook.test.tsx`, `frontend/src/hooks/approvals.hook.test.tsx`, `frontend/src/hooks/shiftBoard.hook.test.tsx`
+  - Component tests: `frontend/src/pages/Login.test.tsx`, `frontend/src/pages/MyRequests.test.tsx`, `frontend/src/pages/ShiftBoard.test.tsx`
+- **Frontend typing fix:** `frontend/src/pages/Login.tsx` now sets `first_name` and `last_name` in `setCurrentUser(...)` to match `CurrentUser` type requirements.
+- **CI/Make/docs wiring for frontend tests:** Added `make test-frontend-unit`, CI job `Frontend Unit Tests` in `.github/workflows/ci.yml`, and frontend + Gherkin guidance in `docs/testing.md`.
+
 - **Date mismatch fix:** Requests like "I need my shift covered tomorrow" now get the correct target date (aligned with seed). LLM was returning hallucinated dates (e.g. 2023-03-16); backend only applied "tomorrow" when parsed.target_date was null. Fix: (1) **LLM prompt** — `parse()` accepts optional `reference_date`; both Ollama and Hosted providers inject "Today's date is YYYY-MM-DD", "Valid scheduling window is today through 30 days", and "For relative dates like 'tomorrow' use today + 1 day; prefer null if uncertain." (2) **Server-side validation** — `ExtractionService` uses `SCHEDULE_WINDOW_DAYS = 30`, `_is_date_in_window()`, and `_normalize_parsed_dates(parsed, today)` to clear `target_date` and `current_shift_date` when outside [today, today+30]. Normalization runs in `extract()` (before preconditions), `_collect_needs_input()`, and `_apply_defaults()`, so out-of-range LLM dates are treated as missing and server applies tomorrow or cover-flow logic.
 - **Cover shift alignment:** For cover requests, backend aligns `current_shift_date`/`current_shift_type` to the shift being covered (the `target_*` shift) so "tomorrow" maps consistently across parsed/validated/structured flows.
 - **Structured submit stability:** `POST /schedule/request/structured` now ensures the `extraction_versions` FK target exists (structured path bypassed `ExtractionService.extract()` which creates the version row). This prevents DB FK violations when inserting ScheduleRequest with `extraction_version` set.

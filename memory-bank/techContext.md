@@ -41,14 +41,16 @@
 
 - **backend/requirements.txt:** fastapi, uvicorn[standard], sqlalchemy, asyncpg, redis, pydantic, pydantic-settings, httpx, pytest, pytest-asyncio.
 - **backend/requirements-dev.txt:** extends requirements.txt for local test runs.
-- **frontend/package.json:** react, react-dom, vite (dev).
+- **frontend/package.json:** react, react-dom, vite (dev), Vitest + React Testing Library + jsdom for frontend unit/component tests.
 
 ## Tool Usage Patterns
 
 - **Seed DB:** `make seed` (or `docker compose exec backend python -m backend.scripts.seed_db`). Idempotent by employee name and shift date range.
 - **Tests:** `make test`, `make test-unit`, `make test-integration` (stack must be up). Strategy: `docs/testing.md`.
+- **Frontend tests:** `make test-frontend-unit` (or `cd frontend && npm test`), optional `cd frontend && npm run typecheck`.
 - **Pytest markers:** `unit`, `integration`, and `integration_llm` (slow live-provider integration lane). `integration_llm` is excluded from fast/default test commands.
 - **CI workflow:** `.github/workflows/ci.yml` defines split lanes:
+  - frontend deterministic unit job (`npm run typecheck`, `npm test` in `frontend/`) for PR/push
   - fast lane (unit + integration-fast) for PR/push
   - live-LLM lane for nightly/manual/main branch events
 - **Config:** `backend/config.py` uses pydantic-settings. Optional: OPENAI_*, OLLAMA_*, LLM_* timeouts and retries.

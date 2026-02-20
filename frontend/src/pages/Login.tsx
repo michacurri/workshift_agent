@@ -40,6 +40,8 @@ export default function Login() {
                 setCurrentUser({
                   id: emp.id,
                   full_name: emp.full_name,
+                  first_name: emp.first_name,
+                  last_name: emp.last_name,
                   role: emp.role === "admin" ? "admin" : "employee",
                 })
               }
