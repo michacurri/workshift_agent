@@ -20,18 +20,18 @@ Operations and scheduling teams receive shift-change requests in natural languag
 
 ## How It Should Work
 
-1. **Employee:** Opens Shiftboard (default). Can paste a message and Parse to fill the form and see summary; or fill form manually. Clicks owned shift to "Request coverage" (pre-fills cover). Submits → request created with correct status (pending_partner for swap, pending_fill for coverage, pending_admin for move).
+1. **Employee:** Opens Shiftboard (default). Types or pastes in single input, clicks Preview; if something is missing (e.g. date), UI asks for that one thing and shows prefilled draft; user completes and submits. Can also open "Review details" to edit structured fields. Clicks owned shift to "Request coverage" (pre-fills cover). Submits → request created with correct status (pending_partner for swap, pending_fill for coverage, pending_admin for move).
 2. **Partner (swap):** Sees request in Consents tab; reads summary and workload; Accept (sends to admin) or Reject (closes as partner_rejected).
 3. **Admin:** Approvals tab shows pending and pending_admin with urgent first; approve/reject. My Requests shows all requests; for pending_fill with coverage_shift_id, "Fill coverage" → list of eligible candidates → Assign to close the request and assign the shift.
 4. **Everyone:** My Requests shows own and (for partner) consent-needed items, with status and summary; urgent highlighted.
 
 ## User Experience Goals
 
-- **Shiftboard:** Primary entry; paste message + Parse; summary shown first (not raw JSON); request coverage by clicking owned shift.
+- **Shiftboard:** Primary entry; **single input** "Describe your request (or paste a message)" + Preview; summary shown first; when info is missing, UI shows targeted prompts (e.g. "What date?") and prefilled draft instead of a dead-end error; "Review details" (structured form) optional; request coverage by clicking owned shift.
 - **Consents:** Clear summary and workload; one-click Accept/Reject.
 - **My Requests:** List with status and summary; admin sees Fill coverage flow for pending_fill.
 - **Approvals:** Pending list with summary; urgent (<48h) at top and highlighted; approve/reject.
-- **Errors:** API returns errorCode, userMessage, developerMessage, correlationId.
+- **Errors:** API returns errorCode, userMessage, developerMessage, correlationId. Preview does not 400 for missing fields; returns needsInput for guided completion.
 
 ## Edge Cases the Product Handles
 

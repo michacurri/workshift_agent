@@ -4,8 +4,8 @@
 
 - **Frontend:** React + Vite SPA; pages: SubmitRequest, Approvals, Dashboard, Shiftboard (default), Consents, My Requests, AdminEmployees, Login. `api.ts` for fetch; X-Employee-Id on requests; auth via useAuth (currentUser, logout).
 - **Backend:** FastAPI in `backend/main.py`; routers: schedule, partner, approval, employees, metrics, health. No business logic in route handlers—all in services.
-- **LLM layer:** Abstract base in `llm/base.py`; Ollama and hosted providers; `llm/factory.py` selects by `LLM_PROVIDER` only. Used only for extraction-as-assist when user supplies text.
-- **Services:** extraction_service (parse + defaults + version); rule_engine (validation, resolve_employee, get_eligible_candidates_for_shift); scheduler_service (unified preview/request, fingerprint, normalized IDs and status, list_shifts, list_candidates, assign_shift, list_requests, _build_summary); approval_service (list_pending including pending_admin, approve/reject using normalized IDs when present, urgent); partner_service (list_pending for partner, accept/reject).
+- **LLM layer:** Abstract base in `llm/base.py`; Ollama and hosted providers; `llm/factory.py` selects by `LLM_PROVIDER` only. `parse(text, requester_context=..., reference_date=...)`; when reference_date is set, providers inject "Today's date is YYYY-MM-DD" and valid 30-day window into prompt. Used only for extraction-as-assist when user supplies text.
+- **Services:** extraction_service (extract, parse_lenient, _collect_needs_input, _build_requester_context—no UUIDs in LLM context; _apply_defaults, _enforce_parsed_preconditions; _normalize_parsed_dates, SCHEDULE_WINDOW_DAYS=30 for date sanity-check; passes reference_date=today into provider.parse()); rule_engine (validation, resolve_employee, get_eligible_candidates_for_shift); scheduler_service (preview_unified uses parse_lenient for text path, returns needsInput; request_unified, list_requests, list_candidates, assign_shift, _build_summary; structured submit ensures `extraction_versions` row exists before inserting ScheduleRequest); approval_service; partner_service.
 - **Data:** Postgres = source of truth. ScheduleRequest has requester_employee_id (NOT NULL), partner_employee_id, requester_shift_id, partner_shift_id, coverage_shift_id; status in (pending, pending_partner, pending_admin, pending_fill, partner_rejected, approved, rejected, failed). Redis = ephemeral approval tokens (TTL 900).
 
 ## Key Technical Decisions
@@ -23,11 +23,15 @@
 - **Dependency injection:** get_db_session, get_current_user, require_admin.
 - **Factory for LLM:** Single place for provider; no conditionals elsewhere.
 - **Middleware:** requestId, correlationId; AppError handler returns structured JSON.
-- **Schemas:** Pydantic for API and extraction; PreviewRequestIn (one of text/structured), PreviewResponse, ScheduleRequestOut with summary, PartnerPendingItem, ScheduleRequestListItem with urgent, ShiftCandidateOut, ShiftAssignIn.
+- **Schemas:** Pydantic for API and extraction; PreviewRequestIn (one of text/structured), PreviewResponse (parsed, validation, summary, needsInput list of NeedsInputItem: field, prompt, options), ScheduleRequestOut with summary, PartnerPendingItem, ScheduleRequestListItem with urgent, ShiftCandidateOut, ShiftAssignIn.
+- **Test stratification pattern:** Marker-based test lanes separate deterministic API behavior from live-provider behavior:
+  - `integration` = deterministic HTTP integration tests
+  - `integration_llm` = live LLM-dependent integration tests (slow, opt-in)
+  Make/CI lanes are built on this marker split.
 
 ## Component Relationships
 
-- **Schedule flow:** Router → SchedulerService.preview_unified / request_unified (or process_request / process_structured_request). Text path uses ExtractionService; both paths use RuleEngine, set normalized IDs and initial status, write ScheduleRequest, RequestMetrics, AuditLog, Redis when pending/pending_admin.
+- **Schedule flow:** Router → SchedulerService.preview_unified / request_unified. Preview text path: ExtractionService.parse_lenient (provider.parse with reference_date=today + _collect_needs_input, which normalizes parsed dates) → if needsInput non-empty return 200 with needsInput; else apply_defaults (normalizes dates then tomorrow default), RuleEngine, _build_summary. Request text path: extract (parse with reference_date, normalize dates, full preconditions) then process_request. Structured request path: build ParsedExtraction from payload → apply_defaults → RuleEngine → ensure `extraction_versions` FK target exists → insert ScheduleRequest. Both paths use RuleEngine for validation; request path sets normalized IDs and status, writes ScheduleRequest, RequestMetrics, AuditLog, Redis when pending/pending_admin.
 - **Partner flow:** Router → PartnerService; list_pending filters by status=pending_partner and partner_employee_id=current_user; accept/reject update status only (accept → pending_admin).
 - **Approval flow:** Router → ApprovalService; list_pending filters pending and pending_admin, uses requester_employee_id/partner_employee_id when present; approve uses shift IDs when present (swap: two assignments); urgent computed and sorted.
 - **Coverage fill:** Admin calls list_candidates (rule_engine.get_eligible_candidates_for_shift) then assign_shift (updates Shift.assigned_employee_id and matching ScheduleRequest to approved).
@@ -39,3 +43,6 @@
 - **Rule engine get_eligible_candidates_for_shift:** For each employee, _validate_skill_for_shift, validate_certifications, check_shift_conflict(..., allowed_assignee_id=emp.id); include only when all pass.
 - **Approval _update_status_if_pending:** WHERE status IN (pending, pending_admin); returning ScheduleRequest.
 - **Seed:** Same as before; run after DB reset when new columns exist. `docker compose exec backend python -m backend.scripts.seed_db`.
+- **CI execution path:** `.github/workflows/ci.yml` runs:
+  - fast lane (`make test-unit`, `make test-integration-fast`) for PR/push validation
+  - live-LLM lane (`make test-integration-llm`) for nightly/manual/main safety checks

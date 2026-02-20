@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from datetime import date
 
 from backend.schemas import HealthStatus, ParsedExtraction
 
@@ -9,7 +10,12 @@ class LLMProvider(ABC):
     extraction_version: str
 
     @abstractmethod
-    async def parse(self, text: str, requester_context: str | None = None) -> ParsedExtraction:
+    async def parse(
+        self,
+        text: str,
+        requester_context: str | None = None,
+        reference_date: date | None = None,
+    ) -> ParsedExtraction:
         raise NotImplementedError
 
     @abstractmethod

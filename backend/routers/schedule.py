@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.db import get_db_session
 from backend.deps import get_current_user, require_admin
-from backend.models import Employee
+from backend.models import Employee, EmployeeRole
 from backend.schemas import PreviewRequestIn, PreviewResponse, ScheduleRequestListItem, ScheduleRequestOut, ShiftAssignIn, ShiftsResponse, StructuredRequestIn
 from backend.services.scheduler_service import SchedulerService
 
@@ -46,7 +46,7 @@ async def list_shifts(
     current_user: Employee = Depends(get_current_user),
 ) -> ShiftsResponse:
     effective_employee_id = employee_id
-    if current_user.role != current_user.role.admin:  # type: ignore[attr-defined]
+    if current_user.role != EmployeeRole.admin:
         effective_employee_id = str(current_user.id)
     return await service.list_shifts(
         session=session,

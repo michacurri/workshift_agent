@@ -24,6 +24,7 @@ export interface PreviewResponse {
   parsed: Record<string, unknown>;
   validation: RuleEngineResult;
   summary: string;
+  needsInput?: { field: string; prompt: string; options?: string[] | null }[];
 }
 
 export interface PartnerPendingItem {

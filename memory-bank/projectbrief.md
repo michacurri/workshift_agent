@@ -7,7 +7,7 @@ Build a **production-ready, hybrid LLM workflow agent** that accepts natural lan
 ## Core Requirements
 
 - **Input:** Natural language or structured (unified endpoints). Text triggers LLM extraction; structured bypasses LLM.
-- **Extraction:** LLM parses free text when supplied; Pydantic validation and deterministic defaults. All responses include human-readable summary.
+- **Extraction:** LLM parses free text when supplied; Pydantic validation and deterministic defaults. Preview returns human-readable summary and optional needsInput (guided completion); no stable identifiers (UUIDs) sent to LLM.
 - **Validation:** Deterministic rule engine only. Checks: employee exists, skill match, certifications, shift conflict; returns valid, errorCodes, suggestions. No LLM in rules.
 - **State:** Postgres = source of truth. ScheduleRequest has normalized requester/partner/shift IDs; status: pending_partner, pending_admin, pending_fill, partner_rejected, approved, rejected. Redis = ephemeral approval tokens (TTL 900s).
 - **Workflows:** Swap → pending_partner (partner accept → pending_admin); coverage → pending_fill until admin assigns; move → pending_admin. Approve/reject transactional; 409 if not pending/pending_admin.

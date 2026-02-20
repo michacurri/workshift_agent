@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     llm_hosted_timeout_seconds: float = Field(default=10.0, alias="LLM_HOSTED_TIMEOUT_SECONDS")
     llm_max_retries: int = Field(default=2, alias="LLM_MAX_RETRIES")
     dev_mode: bool = Field(default=True, alias="DEV_MODE")
+    org_timezone: str = Field(default="America/Toronto", alias="ORG_TIMEZONE")
 
 
 @lru_cache

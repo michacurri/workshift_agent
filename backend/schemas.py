@@ -134,10 +134,19 @@ class PreviewRequestIn(BaseModel):
         return self
 
 
+class NeedsInputItem(BaseModel):
+    """UI-friendly prompt for missing/ambiguous inputs in a draft request."""
+
+    field: str
+    prompt: str
+    options: list[str] | None = None
+
+
 class PreviewResponse(BaseModel):
     parsed: dict[str, Any]
     validation: RuleEngineResult
     summary: str
+    needsInput: list[NeedsInputItem] = Field(default_factory=list)
 
 
 class PartnerPendingItem(BaseModel):

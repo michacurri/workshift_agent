@@ -8,6 +8,7 @@ from backend.db import redis_client
 from backend.errors import AppError
 from backend.models import AuditLog, Employee, EmployeeRole, RequestMetrics, RequestStatus, ScheduleRequest, Shift, ShiftType
 from backend.schemas import ApprovalActionOut, ErrorCode, PendingApprovalItem
+from backend.time_utils import org_now, org_tz
 
 
 async def _resolve_employee_from_extraction(
@@ -53,6 +54,10 @@ class ApprovalService:
             requester_shift_type = ext.get("current_shift_type")
             partner_shift_date = ext.get("partner_shift_date") or ext.get("target_date")
             partner_shift_type = ext.get("partner_shift_type") or ext.get("target_shift_type")
+            if requester_shift_date is not None and not isinstance(requester_shift_date, date):
+                requester_shift_date = date.fromisoformat(str(requester_shift_date))
+            if partner_shift_date is not None and not isinstance(partner_shift_date, date):
+                partner_shift_date = date.fromisoformat(str(partner_shift_date))
             result_summary = None
             if requested_action == "swap" and requester and partner:
                 rd = str(requester_shift_date) if requester_shift_date else "?"
@@ -65,13 +70,15 @@ class ApprovalService:
                     continue
             urgent = False
             shift_date_val: date | None = requester_shift_date
+            if shift_date_val is not None and not isinstance(shift_date_val, date):
+                shift_date_val = date.fromisoformat(str(shift_date_val))
             if shift_date_val is None and getattr(request, "requester_shift_id", None):
                 sh = await session.get(Shift, request.requester_shift_id)
                 if sh:
                     shift_date_val = sh.date
             if shift_date_val is not None:
-                shift_start = datetime.combine(shift_date_val, datetime.min.time(), tzinfo=timezone.utc)
-                urgent = shift_start <= datetime.now(timezone.utc) + timedelta(hours=48)
+                shift_start = datetime.combine(shift_date_val, datetime.min.time(), tzinfo=org_tz())
+                urgent = shift_start <= org_now() + timedelta(hours=48)
             items.append(
                 PendingApprovalItem(
                     requestId=request.id,
