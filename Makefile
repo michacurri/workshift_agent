@@ -7,7 +7,7 @@ ENV_FILE := $(if $(wildcard .env),.env,.env.example)
 COMPOSE := docker compose --env-file $(ENV_FILE)
 COMPOSE_OLLAMA := $(COMPOSE) --profile ollama
 
-.PHONY: help bootstrap up down restart ps logs logs-backend logs-db psql redis-cli backend-sh seed db-reset frontend-dev test test-all test-unit test-integration test-integration-fast test-integration-llm test-integration-all ollama-serve ollama-check up-ollama ollama-pull
+.PHONY: help bootstrap up down restart ps logs logs-backend logs-db psql redis-cli backend-sh seed db-reset frontend-dev test-frontend-unit test test-all test-unit test-integration test-integration-fast test-integration-llm test-integration-all ollama-serve ollama-check up-ollama ollama-pull
 
 help:
 	@echo "Workshift Agent — common targets"
@@ -40,6 +40,7 @@ help:
 	@echo "    make db-reset      Stop stack, remove volumes, up, seed (clean state)"
 	@echo ""
 	@echo "  Tests (stack must be up: make up && make seed)"
+	@echo "    make test-frontend-unit  Frontend unit/component tests (Vitest, no Docker needed)"
 	@echo "    make test          Fast default (unit + integration excluding live-LLM)"
 	@echo "    make test-all      Full suite (includes live-LLM tests)"
 	@echo "    make test-unit     Unit tests only (service-level)"
@@ -114,6 +115,9 @@ db-reset: down
 frontend-dev:
 	@if [ ! -d frontend/node_modules ]; then (cd frontend && npm install); fi
 	cd frontend && npm run dev
+
+test-frontend-unit:
+	cd frontend && npm test
 
 test:
 	$(COMPOSE) exec backend sh -c "cd /app/backend && pytest tests -m 'not integration_llm' -v"

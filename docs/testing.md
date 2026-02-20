@@ -1,13 +1,28 @@
 # Testing Strategy
 
-This document describes the unit and integration test approach and how it aligns with Make targets and CI for a TDD workflow driven by user stories (e.g. from Product).
+This document describes backend and frontend test strategy and how it aligns with Make targets and CI for a TDD workflow driven by user stories (e.g. from Product).
 
 ## Goals
 
 - **Unit tests:** Fast, service-level tests that exercise business logic with a real DB/Redis (same stack as dev). No HTTP; call services directly. Isolated from external LLM.
 - **Integration tests:** Run against the live API (FastAPI app) with the same stack. Use `httpx` against `http://localhost:8000` to assert full request/response and status codes.
-- **CI:** One contract — `make test-unit` and `make test-integration` run the same way locally and in CI.
+- **Frontend unit tests:** Fast Vitest + Testing Library tests for frontend API/auth/hooks/pages using deterministic mocks (no real network).
+- **CI:** One contract — backend and frontend fast lanes run deterministically on PR/push.
 - **TDD:** User stories (scenarios) from Product can be turned into integration tests first, then implemented; unit tests cover service-level edge cases.
+
+## Gherkin / JTBD Pattern
+
+Frontend tests should include Product-readable scenario language using this format:
+
+- **When** `[actor need / trigger]`
+- **And** `[context / action input]`
+- **Then** `[expected user outcome]`
+
+Example:
+
+- **When** an employee needs to make a change to their schedule
+- **And** they enter a request in natural language
+- **Then** the parser should correctly parse the request
 
 ## Layout
 
@@ -22,6 +37,10 @@ This document describes the unit and integration test approach and how it aligns
 
 ## How to Run
 
+- **Frontend (no Docker required):**
+  - `make test-frontend-unit` (repo root)
+  - or in `frontend/`: `npm test`
+  - optional quality gate: `npm run typecheck`
 - **Stack must be up** for both unit and integration tests (they use the same Postgres/Redis as dev).
 - From repo root:
   - `make test-unit` — runs `pytest -m unit` inside the backend container.
@@ -52,6 +71,7 @@ This document describes the unit and integration test approach and how it aligns
 
 - **Recommended:** Run in CI with the stack up (e.g. `docker compose up -d`, then `docker compose exec backend pytest`), or run `make test-unit` and `make test-integration` in a job that has Docker Compose available.
 - **Recommended split:**
+  - **PR lane:** frontend unit tests (`npm run typecheck`, `npm test` in `frontend/`)
   - **PR lane:** `make test-unit` + `make test-integration-fast`
   - **Nightly/protected lane:** `make test-integration-llm`
 - **Contract:** default developer and PR runs exclude live-LLM tests; live-LLM coverage remains mandatory in a dedicated CI lane.
