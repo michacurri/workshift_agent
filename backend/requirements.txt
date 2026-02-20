@@ -2,10 +2,12 @@ fastapi
 uvicorn[standard]
 sqlalchemy
 asyncpg
+psycopg2-binary
 redis
 pydantic
 pydantic-settings
 httpx
+alembic
 pytest
 pytest-asyncio
 tzdata

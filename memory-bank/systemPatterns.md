@@ -5,7 +5,7 @@
 - **Frontend:** React + Vite SPA; pages: SubmitRequest, Approvals, Dashboard, Shiftboard (default), Consents, My Requests, AdminEmployees, Login. `api.ts` for fetch; X-Employee-Id on requests; auth via useAuth (currentUser, logout).
 - **Backend:** FastAPI in `backend/main.py`; routers: schedule, partner, approval, employees, metrics, health. No business logic in route handlers—all in services.
 - **LLM layer:** Abstract base in `llm/base.py`; Ollama and hosted providers; `llm/factory.py` selects by `LLM_PROVIDER` only. `parse(text, requester_context=..., reference_date=...)`; when reference_date is set, providers inject "Today's date is YYYY-MM-DD" and valid 30-day window into prompt. Used only for extraction-as-assist when user supplies text.
-- **Services:** extraction_service (extract, parse_lenient, _collect_needs_input, _build_requester_context—no UUIDs in LLM context; _apply_defaults, _enforce_parsed_preconditions; _normalize_parsed_dates, SCHEDULE_WINDOW_DAYS=30 for date sanity-check; passes reference_date=today into provider.parse()); rule_engine (validation, resolve_employee, get_eligible_candidates_for_shift); scheduler_service (preview_unified uses parse_lenient for text path, returns needsInput; request_unified, list_requests, list_candidates, assign_shift, _build_summary; structured submit ensures `extraction_versions` row exists before inserting ScheduleRequest); approval_service; partner_service.
+- **Services:** extraction_service (extract, parse_lenient, _collect_needs_input, _build_requester_context—no UUIDs in LLM context; _apply_defaults, _enforce_parsed_preconditions; _normalize_parsed_dates, SCHEDULE_WINDOW_DAYS=30 for date sanity-check; passes reference_date=today into provider.parse where today is org-local via `org_today()`); rule_engine (validation, resolve_employee, get_eligible_candidates_for_shift); scheduler_service (preview_unified uses parse_lenient for text path, returns needsInput; request_unified, list_requests, list_candidates, assign_shift, _build_summary; structured submit ensures `extraction_versions` row exists before inserting ScheduleRequest; urgent computed in org timezone); approval_service (urgent computed in org timezone); partner_service.
 - **Data:** Postgres = source of truth. ScheduleRequest has requester_employee_id (NOT NULL), partner_employee_id, requester_shift_id, partner_shift_id, coverage_shift_id; status in (pending, pending_partner, pending_admin, pending_fill, partner_rejected, approved, rejected, failed). Redis = ephemeral approval tokens (TTL 900).
 
 ## Key Technical Decisions
@@ -16,7 +16,8 @@
 - **Status lifecycle:** swap → pending_partner → (accept) pending_admin or (reject) partner_rejected; move/cover → pending_admin or pending_fill. Approval service only acts on pending and pending_admin.
 - **Transactional approval and partner actions:** UPDATE/status checks; 409 if not in expected state.
 - **Unified preview/request:** One body shape (text or structured); summary returned for UI; no raw JSON as primary display.
-- **48h urgent:** Computed at read time from related shift date; unresolved statuses only; sort urgent first in list_requests and list_pending.
+- **48h urgent:** Computed at read time from related shift date in org timezone (`ORG_TIMEZONE`, default `America/Toronto`); unresolved statuses only; sort urgent first in list_requests and list_pending.
+- **Org-time date semantics:** Date-only interpretation ("today/tomorrow", parsed-date window normalization, frontend `YYYY-MM-DD` generation) is standardized to org timezone instead of UTC.
 
 ## Design Patterns in Use
 

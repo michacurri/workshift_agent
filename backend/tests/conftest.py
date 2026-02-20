@@ -1,7 +1,6 @@
 """Shared pytest fixtures for unit and integration tests."""
 import os
 from datetime import date, timedelta
-from uuid import UUID
 
 import httpx
 import pytest

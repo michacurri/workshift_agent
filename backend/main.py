@@ -31,9 +31,11 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title="Shift Scheduler Agent", version="1.0.0", lifespan=lifespan)
+settings = get_settings()
+cors_allow_origins = [o.strip() for o in (settings.cors_allow_origins or "").split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:5174"],
+    allow_origins=cors_allow_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

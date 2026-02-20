@@ -101,11 +101,12 @@ All common workflows are available via `make` from the repo root. Run `make help
 ### First run
 
 ```bash
-make bootstrap && make up && make seed
+make bootstrap && make up && make migrate && make seed
 ```
 
 - **`make bootstrap`** — Creates `.env` from `.env.example` if missing; installs frontend deps if needed.
 - **`make up`** — Starts backend, Postgres, and Redis in the background.
+- **`make migrate`** — Runs database migrations (Alembic) to create/update tables.
 - **`make seed`** — Seeds the database (employees + shifts). Idempotent; safe to re-run.
 
 Backend API: `http://localhost:8000`. Health: `http://localhost:8000/health`.
@@ -156,6 +157,14 @@ Stack must be up (`make up`) and seeded (`make seed`) before running tests.
 
 See [docs/testing.md](docs/testing.md) for the full testing strategy, TDD workflow, and CI hooks.
 
+## Deployment (Railway)
+
+See:
+
+- [docs/deployment/railway.md](docs/deployment/railway.md)
+- [docs/deployment/migrations.md](docs/deployment/migrations.md)
+- [docs/deployment/domains.md](docs/deployment/domains.md)
+
 ### Frontend
 
 Frontend runs locally with Vite for fast reloads:
@@ -181,7 +190,8 @@ LLM is optional: structured (non–free-text) flows work without any LLM. For na
 
 - **Host Ollama (default for dev):** Run Ollama on your host; see [Ollama (host)](#ollama-host--for-natural-language-parsing) above. `.env`: `LLM_PROVIDER=local`, `OLLAMA_BASE_URL=http://host.docker.internal:11434`.
 - **Ollama in Docker (optional):** `make up-ollama` then `make ollama-pull` once. In `.env` set `OLLAMA_BASE_URL=http://ollama:11434`. Use if you prefer not to run Ollama on the host.
-- **Hosted (e.g. OpenAI, production):** In `.env`: `LLM_PROVIDER=hosted`, set `OPENAI_API_KEY`; optional `OPENAI_BASE_URL`, `OPENAI_MODEL`. No local Ollama needed.
+- **Hosted (Claude-first, production):** In `.env`: `LLM_PROVIDER=hosted`, set `HOSTED_LLM_VENDOR=anthropic` and `ANTHROPIC_API_KEY`; optional `ANTHROPIC_MODEL`. No local Ollama needed.
+- **Hosted (OpenAI-compatible fallback):** In `.env`: `LLM_PROVIDER=hosted`, set `HOSTED_LLM_VENDOR=openai` and `OPENAI_API_KEY`; optional `OPENAI_BASE_URL`, `OPENAI_MODEL`.
 
 No route/service code changes are required when switching.
 

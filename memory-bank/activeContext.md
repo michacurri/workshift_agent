@@ -7,6 +7,11 @@
 
 ## Recent Changes (Post–v3 UX and DX)
 
+- **Org timezone standardization (Toronto):** Date-only semantics now use a single org timezone (`ORG_TIMEZONE`, default `America/Toronto`) instead of UTC date rollovers. Added `backend/time_utils.py` (`org_tz()`, `org_now()`, `org_today()`), wired ExtractionService to use org-local "today" for reference_date/defaults/window normalization, and updated urgent (<48h) calculations in scheduler/approval services to compare shift-start and now in org timezone.
+- **ShiftBoard date generation fix:** Frontend no longer uses `toISOString().slice(0, 10)` for date-only strings. `frontend/src/hooks/shiftBoard.hook.tsx` now formats `YYYY-MM-DD` via `Intl.DateTimeFormat(..., { timeZone: "America/Toronto" })` and builds next-N-day ranges with ISO-date increment helpers to avoid UTC/DST drift.
+- **Config + dependency updates for timezone reliability:** Added `ORG_TIMEZONE=America/Toronto` to `.env.example` and added `tzdata` to backend requirements for reliable zone data in containers.
+- **Timezone regression unit test added:** New `backend/tests/unit/test_time_utils.py` covers the late-evening Toronto scenario (9:35pm local should still be same-day) and tomorrow date increment expectation.
+
 - **Frontend unit testing baseline added (Vitest + RTL + jsdom):** `frontend/package.json` now includes `test`, `test:watch`, `test:coverage`, and `typecheck` scripts with Vitest + Testing Library dependencies. `frontend/vite.config.ts` now includes test config (`jsdom`, setup file, coverage defaults). Shared deterministic setup is in `frontend/src/test/setup.ts`.
 - **Gherkin/JTBD test language established for frontend:** New frontend tests use Product-readable scenario naming (`When / And / Then`) to map engineering assertions directly to jobs-to-be-done.
 - **Frontend test coverage added across high-signal areas:**
@@ -47,6 +52,7 @@
 ## Active Decisions and Preferences
 
 - Postgres = source of truth; Redis = ephemeral approval tokens only.
+- Single-timezone portfolio scope: use org timezone (`America/Toronto`) for all date-only semantics ("today/tomorrow", YYYY-MM-DD ranges, urgent window checks).
 - No business logic in route handlers; all in services.
 - Provider selection only in `llm/factory.py`; no branching on LLM_PROVIDER elsewhere.
 - Structured errors with errorCode, userMessage, developerMessage, correlationId.

@@ -7,7 +7,7 @@ ENV_FILE := $(if $(wildcard .env),.env,.env.example)
 COMPOSE := docker compose --env-file $(ENV_FILE)
 COMPOSE_OLLAMA := $(COMPOSE) --profile ollama
 
-.PHONY: help bootstrap up down restart ps logs logs-backend logs-db psql redis-cli backend-sh seed db-reset frontend-dev test-frontend-unit test test-all test-unit test-integration test-integration-fast test-integration-llm test-integration-all ollama-serve ollama-check up-ollama ollama-pull
+.PHONY: help bootstrap up down restart ps logs logs-backend logs-db psql redis-cli backend-sh seed db-reset migrate migrate-revision frontend-dev test-frontend-unit test test-all test-unit test-integration test-integration-fast test-integration-llm test-integration-all ollama-serve ollama-check up-ollama ollama-pull
 
 help:
 	@echo "Workshift Agent — common targets"
@@ -38,6 +38,7 @@ help:
 	@echo "  Database"
 	@echo "    make seed          Run idempotent seed (employees + shifts)"
 	@echo "    make db-reset      Stop stack, remove volumes, up, seed (clean state)"
+	@echo "    make migrate       Run Alembic migrations to head"
 	@echo ""
 	@echo "  Tests (stack must be up: make up && make seed)"
 	@echo "    make test-frontend-unit  Frontend unit/component tests (Vitest, no Docker needed)"
@@ -104,11 +105,20 @@ backend-sh:
 seed:
 	$(COMPOSE) exec backend python -m backend.scripts.seed_db
 
+migrate:
+	$(COMPOSE) exec backend sh -c "cd /app && alembic -c backend/alembic.ini upgrade head"
+
+# Create a new Alembic revision locally (for developers). Usage:
+#   make migrate-revision MSG="add foo"
+migrate-revision:
+	$(COMPOSE) exec backend sh -c "cd /app && alembic -c backend/alembic.ini revision -m \"$${MSG:-migration}\""
+
 db-reset: down
 	$(COMPOSE) down -v
 	$(COMPOSE) up -d --build
 	@echo "Waiting for backend to be healthy..."
 	@until $$(curl -sf http://localhost:8000/health > /dev/null 2>&1); do sleep 2; done
+	$(COMPOSE) exec backend sh -c "cd /app && alembic -c backend/alembic.ini upgrade head"
 	$(COMPOSE) exec backend python -m backend.scripts.seed_db
 	@echo "DB reset complete."
 

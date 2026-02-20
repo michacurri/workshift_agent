@@ -76,6 +76,12 @@ Example:
   - **Nightly/protected lane:** `make test-integration-llm`
 - **Contract:** default developer and PR runs exclude live-LLM tests; live-LLM coverage remains mandatory in a dedicated CI lane.
 
+## Coverage Audit
+
+Current workflow coverage mapping (JTBD → tests) is tracked at:
+
+- `docs/testing/workflow-coverage-audit.md`
+
 ## Dependencies
 
 - Test deps live in `backend/requirements-dev.txt` (pytest, pytest-asyncio, httpx). Install with `pip install -r backend/requirements-dev.txt` for local test runs, or rely on the backend image including them for `make test-*`.
